@@ -6,7 +6,6 @@ from datetime import datetime
 from dateutil.tz import tzlocal
 tzlocal = tzlocal()
 
-
 config = configparser.ConfigParser() 
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
@@ -17,9 +16,7 @@ def search_by_mask(folder, mask):
     mask_path = str(Path(folder, mask))
     f_paths = glob.glob(mask_path)
     return f_paths
-
-        
-   
+  
 def write_journal(msg):
     time_now = datetime.now(tzlocal).replace(microsecond = 0).isoformat()
     with open(journal_path, 'a') as file: 

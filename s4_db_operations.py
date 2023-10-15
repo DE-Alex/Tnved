@@ -29,11 +29,22 @@ def connect_to_db():
         return exit(1)
     return conn
 
-def select_table_names(scheme):
+def drop_scheme(sch_name):
+    query ='''
+            DROP SCHEMA {0} CASCADE;
+            '''.format(sch_name)
+    a = input(f'Drop scheme "{sch_name}"? (y)')
+    if a == 'y':
+        conn = connect_to_db()
+        curs = conn.cursor()
+        curs.execute(query)         
+        conn.close()    
+    
+def select_table_names(sch_name):
     query ='''
             SELECT tablename FROM pg_tables 
             WHERE schemaname = '{0}'
-            '''.format(scheme)
+            '''.format(sch_name)
     conn = connect_to_db()
     curs = conn.cursor()
     curs.execute(query)            
@@ -51,8 +62,8 @@ def select_col_names(table_name):
     conn.close()
     return columns 
 
-def truncate_table(scheme, table_name):
-    query = f'TRUNCATE {scheme}.{table_name} CASCADE;'
+def truncate_table(sch_name, table_name):
+    query = f'TRUNCATE {sch_name}.{table_name} CASCADE;'
     conn = connect_to_db()
     curs = conn.cursor()
     curs.execute(query)
