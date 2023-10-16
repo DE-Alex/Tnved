@@ -96,9 +96,10 @@ def insert(table_name, columns, dataset):
                     curs.execute(query, values)
             conn.commit()
         except psycopg.Error as e:
-            print(query)
-            print(values)
-            print(e)
+            pass
+            #print(query)
+            #print(values)
+            #print(e)
             #conn.rollback()
             #conn.close()
         

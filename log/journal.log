@@ -1,0 +1,35 @@
+2023-10-16T20:59:08+03:00 download - ok
+2023-10-16T20:59:08+03:00 unzip arhive - ok
+2023-10-16T20:59:13+03:00 decode and normalize - ok
+2023-10-16T20:59:19+03:00 Create tables (if not exist) - ok
+2023-10-16T20:59:19+03:00 TRUNCATE tb_gruppa - ok
+2023-10-16T20:59:19+03:00 TRUNCATE tb_razdel - ok
+2023-10-16T20:59:19+03:00 TRUNCATE tb_sub_poz - ok
+2023-10-16T20:59:19+03:00 TRUNCATE tb_tov_poz - ok
+2023-10-16T20:59:19+03:00 TRUNCATE tb_version - ok
+2023-10-16T20:59:19+03:00 
+INSERT INTO tn_ved.tb_razdel:
+2023-10-16T20:59:19+03:00 
+INSERT INTO tn_ved.tb_gruppa:
+2023-10-16T20:59:20+03:00 
+INSERT INTO tn_ved.tb_tov_poz:
+2023-10-16T20:59:21+03:00 
+INSERT INTO tn_ved.tb_sub_poz:
+2023-10-16T20:59:31+03:00 
+INSERT INTO tn_ved.tb_version:
+2023-10-16T20:59:58+03:00 
+INSERT INTO tn_ved_relative.tb_razdel:
+2023-10-16T20:59:58+03:00 
+INSERT INTO tn_ved_relative.tb_gruppa:
+2023-10-16T20:59:58+03:00 
+INSERT INTO tn_ved_relative.tb_tov_poz:
+2023-10-16T20:59:58+03:00 
+INSERT INTO tn_ved_relative.tb_sub_poz:
+2023-10-16T21:01:15+03:00 
+INSERT INTO tn_ved_relative.tb_razdel:
+2023-10-16T21:01:15+03:00 
+INSERT INTO tn_ved_relative.tb_gruppa:
+2023-10-16T21:01:15+03:00 
+INSERT INTO tn_ved_relative.tb_tov_poz:
+2023-10-16T21:01:15+03:00 
+INSERT INTO tn_ved_relative.tb_sub_poz:

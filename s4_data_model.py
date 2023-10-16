@@ -229,12 +229,7 @@ def main():
         #insert data
         s6_db_operations.insert(table_name, table_columns, dt)
         print(f'{name} - ok')
-    
-
-
-
-    
-    return voc, voc_ext                  
+                
         
 
 def gener_periods(dt_dates):    
@@ -332,7 +327,4 @@ def transform(inp, start):
 
  
 if __name__ == '__main__':
-    #main()
-   voc, voc_ext =  main()
-   # calc(voc)
-   # calc(voc_ext)
+    main()
