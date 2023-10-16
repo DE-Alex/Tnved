@@ -5,13 +5,13 @@ from pathlib import Path
 config = configparser.ConfigParser() 
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
-scheme = config['db_scheme']['scheme_name']
+scheme = config['stage_layer']['scheme_name']
 
-tb_razdel_name = config['db_scheme']['tb_razdel_name']
-tb_gruppa_name = config['db_scheme']['tb_gruppa_name']
-tb_tov_poz_name = config['db_scheme']['tb_tov_poz_name']
-tb_sub_poz_name = config['db_scheme']['tb_sub_poz_name']
-tb_version_name = config['db_scheme']['tb_version_name']
+tb_razdel_name = config['stage_layer']['tb_razdel_name']
+tb_gruppa_name = config['stage_layer']['tb_gruppa_name']
+tb_tov_poz_name = config['stage_layer']['tb_tov_poz_name']
+tb_sub_poz_name = config['stage_layer']['tb_sub_poz_name']
+tb_version_name = config['stage_layer']['tb_version_name']
 
 actions = [  
             '''

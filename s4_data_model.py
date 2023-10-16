@@ -6,25 +6,25 @@ from datetime import date, timedelta
 from pathlib import Path
 
 # developed modules
-import s4_db_operations
+import s6_db_operations
 import s5_common_func
 import sql.core_create_objects
 
 config = configparser.ConfigParser() 
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
-stage_scheme = config['db_scheme']['scheme_name']
+stage_scheme = config['stage_layer']['scheme_name']
 core_scheme = config['core_layer']['scheme_name']
 
-tb_razdel_name = config['db_scheme']['tb_razdel_name']
-tb_gruppa_name = config['db_scheme']['tb_gruppa_name']
-tb_tov_poz_name = config['db_scheme']['tb_tov_poz_name']
-tb_sub_poz_name = config['db_scheme']['tb_sub_poz_name']
-tb_version_name = config['db_scheme']['tb_version_name']
+tb_razdel_name = config['stage_layer']['tb_razdel_name']
+tb_gruppa_name = config['stage_layer']['tb_gruppa_name']
+tb_tov_poz_name = config['stage_layer']['tb_tov_poz_name']
+tb_sub_poz_name = config['stage_layer']['tb_sub_poz_name']
+tb_version_name = config['stage_layer']['tb_version_name']
 
 def main():
     #######@@@@@
-    conn = s4_db_operations.connect_to_db() 
+    conn = s6_db_operations.connect_to_db() 
     query ='''
             DROP SCHEMA {0} CASCADE;
             '''.format(core_scheme)    
@@ -42,7 +42,7 @@ def main():
     conn.commit()
 
     # check db tables and create if not exist  
-    conn = s4_db_operations.connect_to_db()    
+    conn = s6_db_operations.connect_to_db()    
     for query in sql.core_create_objects.actions:
         #print(query)
         curs = conn.cursor()
@@ -70,7 +70,7 @@ def main():
     voc = {}
     for name in [tb_razdel_name, tb_gruppa_name, tb_tov_poz_name, tb_sub_poz_name]:
         query ='SELECT * FROM {0}.{1}'.format(stage_scheme, name)
-        conn = s4_db_operations.connect_to_db()
+        conn = s6_db_operations.connect_to_db()
         curs = conn.cursor()            
         db_data = curs.execute(query).fetchall()
         conn.close
@@ -223,11 +223,11 @@ def main():
         print(name)
         # get column names from table
         table_name = f'{core_scheme}.{name}'
-        table_columns = s4_db_operations.select_col_names(table_name)
+        table_columns = s6_db_operations.select_col_names(table_name)
         #columns = table_columns + all_period_columns
         #input('?')
         #insert data
-        s4_db_operations.insert(table_name, table_columns, dt)
+        s6_db_operations.insert(table_name, table_columns, dt)
         print(f'{name} - ok')
     
 
@@ -334,5 +334,5 @@ def transform(inp, start):
 if __name__ == '__main__':
     #main()
    voc, voc_ext =  main()
-   calc(voc)
-   calc(voc_ext)
+   # calc(voc)
+   # calc(voc_ext)

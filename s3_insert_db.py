@@ -6,7 +6,7 @@ import glob
 from pathlib import Path
 
 # developed modules
-import s4_db_operations
+import s6_db_operations
 import s5_common_func
 import sql.create_objects
 
@@ -15,13 +15,13 @@ config = configparser.ConfigParser()
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
 tmp_folder = Path(sys.path[0], config['general']['tmp_folder'])
-sch_name = config['db_scheme']['scheme_name']
+sch_name = config['stage_layer']['scheme_name']
 
 def main():
-    s4_db_operations.drop_scheme(sch_name)#@@@@@@@@@@
+    s6_db_operations.drop_scheme(sch_name)#@@@@@@@@@@
  
     # create tables if not exist  
-    conn = s4_db_operations.connect_to_db()    
+    conn = s6_db_operations.connect_to_db()    
     for query in sql.create_objects.actions:
         print(query)
         curs = conn.cursor()
@@ -34,11 +34,11 @@ def main():
     s5_common_func.write_journal(msg)
 
     # select table names from db
-    table_names = s4_db_operations.select_table_names(sch_name)
+    table_names = s6_db_operations.select_table_names(sch_name)
     
     # truncate tables with data if already exist
     for tb_name in table_names:
-        s4_db_operations.truncate_table(sch_name, tb_name)
+        s6_db_operations.truncate_table(sch_name, tb_name)
         msg = f'TRUNCATE {tb_name} - ok'
         print(msg)
         s5_common_func.write_journal(msg)
@@ -57,12 +57,12 @@ def main():
         # get short filename (without extension)
         short_name = Path(f_path).stem
         # get table name by short filename
-        table_name = sch_name + '.' + config['db_scheme'][short_name]
+        table_name = sch_name + '.' + config['stage_layer'][short_name]
         
         # get column names from table
-        columns = s4_db_operations.select_col_names(table_name)
+        columns = s6_db_operations.select_col_names(table_name)
         # insert dataset into table
-        s4_db_operations.insert(table_name, columns, dataset)
+        s6_db_operations.insert(table_name, columns, dataset)
                 
         # delete .csv files to clean up tmp folder
         os.remove(f_path)
