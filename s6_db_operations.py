@@ -99,8 +99,8 @@ def insert(table_name, columns, dataset):
             print(query)
             print(values)
             print(e)
-            conn.rollback()
-            conn.close()
+            #conn.rollback()
+            #conn.close()
         
         N = len(part)
         print(f'{N} ', sep=' ', end='', flush=True)
