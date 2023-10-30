@@ -1,4 +1,4 @@
-import sys, os
+import sys
 import configparser
 import glob
 from pathlib import Path
