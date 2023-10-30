@@ -1,7 +1,6 @@
 # standart modules
 import configparser
 import sys, os
-import glob
 import csv
 from pathlib import Path
 from datetime import date
@@ -57,7 +56,7 @@ def main():
         file_version = [f_name, table_name] + version_info
         # save info about TN VED version in csv file separately 
         f_ver_path = Path(tmp_folder, 'tnved_version.csv')
-        with open(f_ver_path, 'a', newline='') as csv_file:
+        with open(f_ver_path, 'a', newline='', encoding = 'utf-8') as csv_file:
             dt_writer = csv.writer(csv_file, delimiter = '|')
             dt_writer.writerow(file_version)
         
@@ -75,7 +74,7 @@ def main():
         f_name = Path(txt_path).stem
         f_name = f_name.lower()
         csv_path = Path(tmp_folder, f_name+'.csv')
-        with open(csv_path, 'w', newline='') as csv_file:
+        with open(csv_path, 'w', newline='', encoding = 'utf-8') as csv_file:
             dt_writer = csv.writer(csv_file, delimiter = '|')
             dt_writer.writerows(dataset)
         
