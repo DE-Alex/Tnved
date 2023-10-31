@@ -79,7 +79,7 @@ def main():
             dt_writer.writerows(dataset)
         
         # delete .txt files to clean up tmp folder
-        os.remove(txt_path)
+        #os.remove(txt_path)
         
     msg = f'decode and normalize - ok'
     print(msg)
