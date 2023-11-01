@@ -1,21 +1,36 @@
 # standart modules
-import sys
+import sys, time
 import configparser
-from datetime import datetime
-from datetime import date, timedelta
+import pandas as pd
+from pandas import DataFrame, Timestamp, Timedelta
+from sqlalchemy import create_engine
+from sqlalchemy import MetaData
 from pathlib import Path
 
 # developed modules
-import s6_db_operations
 import s5_common_func
-import sql.core_create_objects
+from sql.core_create_objects import create_tables
 
-config = configparser.ConfigParser() 
+config = configparser.ConfigParser()
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
-stage_scheme = config['stage_layer']['scheme_name']
-core_scheme = config['core_layer']['scheme_name']
+db_type = config['general']['db_type']
 
+#SQLight settings
+sqlite_stage_path = Path(sys.path[0], config['sqlite']['sqlite_stage_file'])
+sqlite_core_path = Path(sys.path[0], config['sqlite']['sqlite_core_file'])
+
+#Postgres settings
+user = config['postgres']['username']
+password = config['postgres']['password']
+host = config['postgres']['host']
+port = config['postgres']['port']
+dbname = config['postgres']['database']
+
+stage = config['stage_layer']['scheme_name']
+core = config['core_layer']['scheme_name']
+
+#table names
 tb_razdel_name = config['stage_layer']['tb_razdel_name']
 tb_gruppa_name = config['stage_layer']['tb_gruppa_name']
 tb_tov_poz_name = config['stage_layer']['tb_tov_poz_name']
@@ -23,316 +38,303 @@ tb_sub_poz_name = config['stage_layer']['tb_sub_poz_name']
 tb_version_name = config['stage_layer']['tb_version_name']
 
 def main():
-    #######@@@@@
-    conn = s6_db_operations.connect_to_db() 
-    query ='''
-            DROP SCHEMA {0} CASCADE;
-            '''.format(core_scheme)    
-    curs = conn.cursor()
-    curs.execute(query)
-    conn.commit()
-    print('droped')
-    #######@@@@@
+    start = time.time()
+    # connect to "core layer"
+    if db_type == 'sqlite':
+        core_engine = create_engine(f'sqlite:///{sqlite_core_path}')
+        core_scheme = None
+    elif db_type == 'postgres':
+        core_engine = create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
+        core_scheme = core
+    core_conn = core_engine.connect()
+    core_md_obj = MetaData(core_scheme)
 
-    
-    query ='''
-            CREATE SCHEMA IF NOT EXISTS {0};
-            '''.format(core_scheme)
-    curs.execute(query)
-    conn.commit()
+    # drop tables in "core layer" and create new
+    a = input(f'Drop scheme "{core_scheme}" and create new tables? (y)')
+    if a == 'y':
+        core_md_obj.reflect(core_conn)
+        core_md_obj.drop_all(core_conn)
+        core_md_obj = MetaData(core_scheme)
+        core_md_obj = create_tables(core_md_obj)
+        core_md_obj.create_all(core_conn)
+        core_conn.commit()
+        msg = f'Scheme {core_scheme} droped. New tables created.'
+        print(msg)
+        s5_common_func.write_journal(msg)
+    core_md_obj.reflect(core_conn)
 
-    # check db tables and create if not exist  
-    conn = s6_db_operations.connect_to_db()    
-    for query in sql.core_create_objects.actions:
-        #print(query)
-        curs = conn.cursor()
-        curs.execute(query)
-        conn.commit()
-    
-    # truncate table
-    # tb_periods_name = 'tb_periods'
-    # query = 'TRUNCATE {0}.{1} RESTART IDENTITY CASCADE;'.format(core_scheme, tb_periods_name)
-    # print(query)
-    # curs.execute(query)
-    # conn.commit()
-    # conn.close
+    # connect to "stage layer"
+    if db_type == 'sqlite':
+        stage_engine = create_engine(f'sqlite:///{sqlite_stage_path}')
+        stage_scheme = None
+    elif db_type == 'postgres':
+        stage_engine = create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
+        stage_scheme = stage
+    stage_conn = stage_engine.connect()
+    stage_md_obj = MetaData(stage_scheme)
+    stage_md_obj.reflect(stage_conn)
 
+    # get table names from "stage layer"
+    stage_table_names = [table.name for table in stage_md_obj.sorted_tables]
+
+    # read data from database
+    print(f'Read from database:')
+    db_datasets = {}
+    for table_name in stage_table_names:
+        print(f'- from {table_name}:', end = '')
+        df = pd.read_sql_table(table_name, stage_conn, schema = stage_scheme, parse_dates = ['date_from', 'expired'])
+        print(f' {len(df)} rows')
+        db_datasets[table_name] = df
     
-    query ='''
-            SELECT tablename FROM pg_tables 
-            WHERE schemaname = '{0}'
-            '''.format(stage_scheme)
-    result = curs.execute(query).fetchall()
-    
-    stage_table_names = [item[0] for item in result]
-    #print(stage_table_names)
-    
+    # join datasets in one structure to arrange relations
+    print('Join datasets in one structure to arrange relations')
     voc = {}
-    for name in [tb_razdel_name, tb_gruppa_name, tb_tov_poz_name, tb_sub_poz_name]:
-        query ='SELECT * FROM {0}.{1}'.format(stage_scheme, name)
-        conn = s6_db_operations.connect_to_db()
-        curs = conn.cursor()            
-        db_data = curs.execute(query).fetchall()
-        conn.close
-  
-            
-        if name == tb_razdel_name:
-            for row in db_data:
-                r_key = row[0]
-                if r_key in voc.keys():
-                    tmp = voc[r_key]['data']
-                    tmp.append(row)
-                    voc[r_key]['data'] = tmp
-                else:
-                    voc[r_key] = {'data' : [row], 'str' : {}}
-                    
-        elif name == tb_gruppa_name:
-            for row in db_data:
-                r_key = row[0]
-                gr_key = row[1]
-                gr_keys = list(voc[r_key]['str'].keys())
-                if gr_key in gr_keys:
-                    tmp = voc[r_key]['str'][gr_key]['data']
-                    tmp.append(row)
-                    voc[r_key]['str'][gr_key]['data'] = tmp                    
-                else:
-                    voc[r_key]['str'][gr_key] = {'data' : [row], 'str': {}}
-                    
-        elif name == tb_tov_poz_name:
-            for row in db_data:
-                gr_key = row[0]
-                poz_key = row[1]
-                for i in voc.keys():
-                    gr_keys = list(voc[i]['str'].keys())
-                    if gr_key in gr_keys:
-                        poz_keys = list(voc[i]['str'][gr_key]['str'].keys()) 
-                        if poz_key in poz_keys:
-                            tmp = voc[i]['str'][gr_key]['str'][poz_key]['data']
-                            tmp.append(row)
-                            voc[i]['str'][gr_key]['str'][poz_key]['data'] = tmp                       
-                        else:
-                            voc[i]['str'][gr_key]['str'][poz_key] = {'data' : [row], 'str':{}}
-        
-        elif name == tb_sub_poz_name:
-            for row in db_data:
-                gr_key = row[0]
-                poz_key = row[1]
-                sub_key = row[2]
-                for i in voc.keys():
-                    gr_keys = list(voc[i]['str'].keys())
-                    if gr_key in gr_keys:
-                        poz_keys = list(voc[i]['str'][gr_key]['str'].keys()) 
-                        if poz_key in poz_keys:
-                            sub_keys = list(voc[i]['str'][gr_key]['str'][poz_key]['str'].keys()) 
-                            if sub_key in sub_keys:
-                                tmp = voc[i]['str'][gr_key]['str'][poz_key]['str'][sub_key]['data']
-                                tmp.append(row)
-                                voc[i]['str'][gr_key]['str'][poz_key]['str'][sub_key]['data'] = tmp
-                            else:
-                                voc[i]['str'][gr_key]['str'][poz_key]['str'][sub_key] = {'data' : [row]}
+    # razdel dataset
+    df = db_datasets[tb_razdel_name]
+    for i in df.index:
+        row = list(df.iloc[i])
+        r_key = row[0]
+        if r_key in voc.keys():
+            tmp = voc[r_key]['data']
+            tmp.append(row)
+            voc[r_key]['data'] = tmp
         else:
-            pass
-    print('sorted')
-    import copy
-    voc_ext = copy.deepcopy(voc)        
-        
+            voc[r_key] = {'data' : [row], 'str' : {}}
+
+    # gruppa dataset
+    df = db_datasets[tb_gruppa_name]
+    for i in df.index:
+        row = list(df.iloc[i])
+        r_key = row[0]
+        gr_key = row[1]
+        gr_keys = list(voc[r_key]['str'].keys())
+        if gr_key in gr_keys:
+            tmp = voc[r_key]['str'][gr_key]['data']
+            tmp.append(row)
+            voc[r_key]['str'][gr_key]['data'] = tmp
+        else:
+            voc[r_key]['str'][gr_key] = {'data' : [row], 'str': {}}
+
+    # tov_poz dataset
+    df = db_datasets[tb_tov_poz_name]
+    for i in df.index:
+        row = list(df.iloc[i])
+        gr_key = row[0]
+        poz_key = row[1]
+        for i in voc.keys():
+            gr_keys = list(voc[i]['str'].keys())
+            if gr_key in gr_keys:
+                #append missed data with razdel number
+                row = [i] + row
+                poz_keys = list(voc[i]['str'][gr_key]['str'].keys())
+                if poz_key in poz_keys:
+                    tmp = voc[i]['str'][gr_key]['str'][poz_key]['data']
+                    tmp.append(row)
+                    voc[i]['str'][gr_key]['str'][poz_key]['data'] = tmp
+                else:
+                    voc[i]['str'][gr_key]['str'][poz_key] = {'data' : [row], 'str':{}}
+
+    # sub_poz dataset
+    df = db_datasets[tb_sub_poz_name]
+    for i in df.index:
+        row = list(df.iloc[i])
+        gr_key = row[0]
+        poz_key = row[1]
+        sub_key = row[2]
+        for i in voc.keys():
+            gr_keys = list(voc[i]['str'].keys())
+            if gr_key in gr_keys:
+                #append missed data with razdel number
+                row = [i] + row
+                poz_keys = list(voc[i]['str'][gr_key]['str'].keys())
+                if poz_key in poz_keys:
+                    sub_keys = list(voc[i]['str'][gr_key]['str'][poz_key]['str'].keys())
+                    if sub_key in sub_keys:
+                        tmp = voc[i]['str'][gr_key]['str'][poz_key]['str'][sub_key]['data']
+                        tmp.append(row)
+                        voc[i]['str'][gr_key]['str'][poz_key]['str'][sub_key]['data'] = tmp
+                    else:
+                        voc[i]['str'][gr_key]['str'][poz_key]['str'][sub_key] = {'data' : [row]}
+
+    # version dataset
+    df = db_datasets[tb_version_name]
+    tnved_version_data = [list(df.iloc[i]) for i in df.index]
+    print('done')
+
+    print('Split time intervals to exclude overlap:')
+    print('- "pozitions" and "subpozitions"')
     #Poz and SubPoz
-    for r in voc_ext.keys():
-        for g in list(voc_ext[r]['str'].keys()):
-            for p in list(voc_ext[r]['str'][g]['str'].keys()):
-                p_dt = voc_ext[r]['str'][g]['str'][p]['data']
+    for r in voc.keys():
+        for g in list(voc[r]['str'].keys()):
+            for p in list(voc[r]['str'][g]['str'].keys()):
+                p_tmp = voc[r]['str'][g]['str'][p]['data']
+                p_dt = correct_dates_intervals(p_tmp)
+                voc[r]['str'][g]['str'][p]['data'] = p_dt
                 p_dates_joined = [row[-2] for row in p_dt]
                 s_dates_joined = []
-                for s in list(voc_ext[r]['str'][g]['str'][p]['str'].keys()):
-                    s_dt = voc_ext[r]['str'][g]['str'][p]['str'][s]['data']
+                for s in list(voc[r]['str'][g]['str'][p]['str'].keys()):
+                    s_tmp = voc[r]['str'][g]['str'][p]['str'][s]['data']
+                    s_dt = correct_dates_intervals(s_tmp)
+                    voc[r]['str'][g]['str'][p]['str'][s]['data'] = s_dt
                     for row in s_dt:
                         s_dates_joined.append(row[-2])
+                voc[r]['str'][g]['str'][p]['data'] = correct_start_date(s_dates_joined, p_dt)
                 dates = p_dates_joined + s_dates_joined
-                unique_dates = list(set(dates))
-                dt_dates = [date.fromisoformat(d) for d in unique_dates]
-                dt_dates.sort()
-                periods = gener_periods(dt_dates)
+                periods = gener_periods(dates)
                 
-                voc_ext[r]['str'][g]['str'][p]['data'] = ext_data(p_dt, periods)
-                
-                for s in list(voc_ext[r]['str'][g]['str'][p]['str'].keys()):
-                    s_dt = voc_ext[r]['str'][g]['str'][p]['str'][s]['data']
-                    voc_ext[r]['str'][g]['str'][p]['str'][s]['data'] = ext_data(s_dt, periods)
+                voc[r]['str'][g]['str'][p]['data'] = ext_data(p_dt, periods)
 
-    #Group and Poz                
-    for r in voc_ext.keys():
-        for g in list(voc_ext[r]['str'].keys()):
-            g_dt = voc_ext[r]['str'][g]['data']
+                for s in list(voc[r]['str'][g]['str'][p]['str'].keys()):
+                    s_dt = voc[r]['str'][g]['str'][p]['str'][s]['data']
+                    voc[r]['str'][g]['str'][p]['str'][s]['data'] = ext_data(s_dt, periods)
+
+    print('- "groups" and "pozitions"')
+    #Group and Poz
+    for r in voc.keys():
+        for g in list(voc[r]['str'].keys()):
+            g_tmp = voc[r]['str'][g]['data']
+            g_dt = correct_dates_intervals(g_tmp)
+            voc[r]['str'][g]['data'] = g_dt
             g_dates_joined = [row[-2] for row in g_dt]
             p_dates_joined = []
-            for p in list(voc_ext[r]['str'][g]['str'].keys()):
-                p_dt = voc_ext[r]['str'][g]['str'][p]['data']
+            for p in list(voc[r]['str'][g]['str'].keys()):
+                p_dt = voc[r]['str'][g]['str'][p]['data']
                 for row in p_dt:
                     p_dates_joined.append(row[-2])
+            voc[r]['str'][g]['data'] = correct_start_date(p_dates_joined, g_dt)
             dates = g_dates_joined + p_dates_joined
-            unique_dates = list(set(dates))
-            dt_dates = [date.fromisoformat(d) for d in unique_dates]
-            dt_dates.sort()
-            periods = gener_periods(dt_dates)
-            
-            voc_ext[r]['str'][g]['data'] = ext_data(g_dt, periods)
-            
-            for p in list(voc_ext[r]['str'][g]['str'].keys()):
-                p_dt = voc_ext[r]['str'][g]['str'][p]['data']
-                voc_ext[r]['str'][g]['str'][p]['data'] = ext_data(p_dt, periods)
+            periods = gener_periods(dates)
 
+            voc[r]['str'][g]['data'] = ext_data(g_dt, periods)
+
+            for p in list(voc[r]['str'][g]['str'].keys()):
+                p_dt = voc[r]['str'][g]['str'][p]['data']
+                voc[r]['str'][g]['str'][p]['data'] = ext_data(p_dt, periods)
+
+    print('- "razdel" and "groups"')
     #Razdel and Group
-    for r in voc_ext.keys():
-        #for g in list(voc_ext[r]['gruppa'].keys()):
-        r_dt = voc_ext[r]['data']
+    for r in voc.keys():
+        r_tmp = voc[r]['data']
+        r_dt = correct_dates_intervals(r_tmp)
+        voc[r]['data'] = r_dt
         r_dates_joined = [row[-2] for row in r_dt]
         g_dates_joined = []
-        for g in list(voc_ext[r]['str'].keys()):
-            g_dt = voc_ext[r]['str'][g]['data']
+        for g in list(voc[r]['str'].keys()):
+            g_dt = voc[r]['str'][g]['data']
             for row in g_dt:
                 g_dates_joined.append(row[-2])
+        voc[r]['data'] = correct_start_date(g_dates_joined, r_dt)
         dates = r_dates_joined + g_dates_joined
-        unique_dates = list(set(dates))
-        dt_dates = [date.fromisoformat(d) for d in unique_dates]
-        dt_dates.sort()
-        periods = gener_periods(dt_dates)
-        
-        voc_ext[r]['data'] = ext_data(r_dt, periods)
-        
-        for g in list(voc_ext[r]['str'].keys()):
-            g_dt = voc_ext[r]['str'][g]['data']
-            voc_ext[r]['str'][g]['data'] = ext_data(g_dt, periods)
-    
-    razdel_data = []
-    gruppa_data = []
-    tov_poz_data = []
-    sub_poz_data = []
-    
-    for i in voc_ext.keys():
-        razdel_data = razdel_data + voc_ext[i]['data']
-        for j in voc_ext[i]['str'].keys():
-            gruppa_data = gruppa_data + voc_ext[i]['str'][j]['data']
-            for k in voc_ext[i]['str'][j]['str'].keys():
-                tov_poz_data = tov_poz_data + voc_ext[i]['str'][j]['str'][k]['data']
-                for l in voc_ext[i]['str'][j]['str'][k]['str'].keys():
-                    sub_poz_data = sub_poz_data + voc_ext[i]['str'][j]['str'][k]['str'][l]['data']
-    
-    tmp = [(tb_razdel_name, razdel_data), (tb_gruppa_name, gruppa_data), (tb_tov_poz_name, tov_poz_data), (tb_sub_poz_name, sub_poz_data)] 
-                    
-    for name, dt in tmp:
-        print(name)
-        # get column names from table
-        table_name = f'{core_scheme}.{name}'
-        table_columns = s6_db_operations.select_col_names(table_name)
-        #columns = table_columns + all_period_columns
-        #input('?')
-        #insert data
-        s6_db_operations.insert(table_name, table_columns, dt)
-        print(f'{name} - ok')
-    
+        periods = gener_periods(dates)
+        voc[r]['data'] = ext_data(r_dt, periods)
 
+        for g in list(voc[r]['str'].keys()):
+            g_dt = voc[r]['str'][g]['data']
+            voc[r]['str'][g]['data'] = ext_data(g_dt, periods)
 
+    print('Reorganize dictionaries into plain datasets')
+    razdel_data, gruppa_data, tov_poz_data, sub_poz_data = [], [], [], []
+    for i in voc.keys():
+        razdel_data = razdel_data + voc[i]['data']
+        for j in voc[i]['str'].keys():
+            gruppa_data = gruppa_data + voc[i]['str'][j]['data']
+            for k in voc[i]['str'][j]['str'].keys():
+                tov_poz_data = tov_poz_data + voc[i]['str'][j]['str'][k]['data']
+                for l in voc[i]['str'][j]['str'][k]['str'].keys():
+                    sub_poz_data = sub_poz_data + voc[i]['str'][j]['str'][k]['str'][l]['data']
 
-    
-    return voc, voc_ext                  
-        
+    data_sets = [(tb_razdel_name, razdel_data), (tb_gruppa_name, gruppa_data), (tb_tov_poz_name, tov_poz_data), (tb_sub_poz_name, sub_poz_data), (tb_version_name, tnved_version_data)]
 
-def gener_periods(dt_dates):    
-    periods = []
-    N = len(dt_dates)
+    print('Load to database:')
+    for table_name, dt_date in data_sets:
+        # get column names
+        if core_scheme != None:
+            col_names = core_md_obj.tables[core_scheme + '.' + table_name].columns.keys()
+        else:
+            col_names = core_md_obj.tables[table_name].columns.keys()
+        try:
+            # convert "list" objects to pandas "DataFrames"
+            pdt = pd.DataFrame(dt_date, columns = col_names)
+
+            # insert dataset into database table
+            result = pdt.to_sql(table_name, core_conn, schema = core_scheme, if_exists = 'append', index = False, method = None, chunksize = 1000)
+
+            core_conn.commit()
+            msg = f'- {table_name}: loaded'
+            print(msg)
+            s5_common_func.write_journal(msg)
+        except Exception as e:
+            print(e)
+    finish = time.time()
+    print(f'Finished per {round(finish-start)} sec')
+
+def correct_dates_intervals(dataset):
+    # correct end dates of the time intervals to exclude gaps between them
+    N = len(dataset)
+    # sort rows by "time_from" value
+    dataset.sort(key = lambda x: x[-2])
+    new_dset = []
     for i in range(N):
-        d1 = dt_dates[i]
+        row = dataset[i]
         if i < N-1:
-            d2 = dt_dates[i+1] - timedelta(days = 1)
+            next_row = dataset[i+1]
+            next_date = next_row[-2]
+            expired = next_date - Timedelta(days = 1)
         elif i == N-1:
-            d2 = date(6666,6,6) #dt_dates[i] + - timedelta(years = 1000)
-        periods.append([str(d1), str(d2)])
+            expired = Timestamp(2030,6,6)
+        new_row = row[:-1]
+        new_row.append(expired)
+        new_dset.append(new_row)
+    return new_dset
+
+def correct_start_date(dates, dataset):
+    # correct dataset issue: 
+    # date (date_from) of the first record in group may be younger
+    # than date of the first records in subgroups 
+    # that broke foreign keys between them.
+    unique_dates = list(set(dates))
+    unique_dates.sort()
+    min_date = unique_dates[0]
+    
+    dataset.sort(key = lambda x: x[-2])
+    start_row = dataset[0]
+    if min_date < start_row[-2]:
+        new_row = start_row[:-2] + [min_date] + [start_row[-1]]
+        dataset[0] = new_row
+    return dataset
+    
+def gener_periods(dt_dates):
+    unique_dates = list(set(dt_dates))
+    unique_dates.sort()
+    periods = []
+    N = len(unique_dates)
+    for i in range(N):
+        d1 = unique_dates[i]
+        if i < N-1:
+            d2 = unique_dates[i+1] - Timedelta(days = 1)
+        elif i == N-1:
+            d2 = Timestamp(2030,6,6)
+        periods.append([d1, d2])
     return periods
 
 def ext_data(data, periods):
     extended_data = []
     for row in data:
-        #print(row)
-        date_from = date.fromisoformat(row[-2])
+        date_from = row[-2]
         expired = row[-1]
-        if expired == None or expired == '':
-            expired = date(6666,6,6)
+        if pd.isnull(expired) == True:
+            expired = Timestamp(2030,6,6)
         else:
-            #print(expired)
-            expired = date.fromisoformat(expired)
-        
+            pass
         for period in periods:
-            #print(period)
-            time_from, expired2 = period
-            time_from = date.fromisoformat(time_from)
-            expired2 = date.fromisoformat(expired2)
-
-            if date_from <= time_from and expired2 <= expired:
-                tmp = list(row)
-                tmp[-1] = str(expired2)
-                tmp[-2] = str(time_from)
-                
-                extended_data.append(tmp) # + (str(time_from), str(expired2))) #@@@@@ modify tables
+            per_from, per_expired = period
+            if date_from <= per_from and per_expired <= expired:
+                tmp = row[:-2]
+                tmp.extend([per_from, per_expired])
+                extended_data.append(tmp)
             else:
                 pass
     return extended_data
 
-# def calc(voc):
-    # razd = 0
-    # grupp = 0
-    # poz = 0
-    # sub = 0
-    # for i in voc.keys():
-        # if i != 'str':
-            # razd = razd + len(voc[i]['data'])
-            # for j in list(voc[i]['str'].keys()):
-                # if j != 'str':
-                    # grupp = grupp + len(voc[i]['str'][j]['data'])
-                    # for k in list(voc[i]['str'][j]['str'].keys()):
-                        # if k != 'str':
-                            # poz = poz + len(voc[i]['str'][j]['str'][k]['data'])
-                            # for l in list(voc[i]['str'][j]['str'][k]['str'].keys()):
-                                # if l != 'str':
-                                    # sub = sub + len(voc[i]['str'][j]['str'][k]['str'][l]['data'])
-    # print(f'{razd}  {grupp} {poz}  {sub}')        
-        
-        
-
-    
-'''   
-def transform(inp, start):
-    for i in inp.keys():
-
-        if start != 3:
-            start = start + 1
-            result = transform(inp[i]['str'], start)
-            inp = result
-        
-        h_dt = inp[i]['data']
-        h_dates_joined = [row[-2] for row in h_dt]
-        l_dates_joined = []
-        for l in list(inp[i]['str'].keys()):
-            l_dt = inp['str'][i]['str'][l]['data']
-            for row in l_dt:
-                l_dates_joined.append(row[-2])
-        dates = h_dates_joined + l_dates_joined
-        unique_dates = list(set(dates))
-        dt_dates = [date.fromisoformat(d) for d in unique_dates]
-        dt_dates.sort()
-        periods = gener_periods(dt_dates)
-        
-        inp[i]['data'] = ext_data(p_dt, periods)
-        
-        for l in list(inp[i]['str'].keys()):
-            s_dt = inp[i]['str'][l]['data']
-            inp[i]['str'][l]['data'] = ext_data(s_dt, periods)
-    return result
-'''
-    
-
- 
 if __name__ == '__main__':
-    #main()
-   voc, voc_ext =  main()
-   # calc(voc)
-   # calc(voc_ext)
+    main()

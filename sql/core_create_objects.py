@@ -1,79 +1,86 @@
-actions = [  
-            '''
-            CREATE SCHEMA IF NOT EXISTS tn_ved_relative;
-            '''
-            # ,
-            # '''
-            # CREATE TABLE IF NOT EXISTS tn_ved_relative.tb_periods (
-                # period_id SERIAL NOT NULL PRIMARY KEY,
-                # time_from varchar NOT NULL,
-                # expired2 varchar NULL             
-            # );
-            # '''
-            ,
-            '''
-            CREATE TABLE IF NOT EXISTS tn_ved_relative.tb_tnved_version (
-                table_name varchar NOT NULL,
-                version varchar NOT NULL,
-                date_from varchar NOT NULL,
-                some_code varchar NULL,
-                period_id int2 NOT NULL ,
-                time_from varchar NOT NULL,
-                expired2 varchar NULL,
-                CONSTRAINT tb_tnved_version_pkey PRIMARY KEY (table_name, version, period_id)
-            );
-            '''
-            ,
-            '''
-            CREATE TABLE IF NOT EXISTS tn_ved_relative.tb_razdel (
-                razdel int2 UNIQUE NOT NULL,
-                naim varchar NULL,
-                prim varchar NULL,
-                date_from varchar NOT NULL,
-                expired varchar NULL,
-                CONSTRAINT tb_razdel_pkey PRIMARY KEY (razdel, date_from)
-            );
-            '''
-            ,
-            '''
-            CREATE TABLE IF NOT EXISTS tn_ved_relative.tb_gruppa (
-                razdel int2 NULL,
-                gruppa int2 UNIQUE NOT NULL,
-                naim varchar NULL,
-                prim varchar NULL,
-                date_from varchar NOT NULL,
-                expired varchar NULL,
-                FOREIGN KEY (razdel)  REFERENCES tn_ved_relative.tb_razdel (razdel),
-                CONSTRAINT tb_gruppa_pkey PRIMARY KEY (gruppa, date_from)
-            );            
-            '''
-            ,
-            '''
-            CREATE TABLE IF NOT EXISTS tn_ved_relative.tb_tov_poz (
-                gruppa int2 NOT NULL,
-                tov_poz int2 UNIQUE NOT NULL,
-                naim varchar NULL,
-                date_from varchar NOT NULL,
-                expired varchar NULL,
-                FOREIGN KEY (gruppa)  REFERENCES tn_ved_relative.tb_gruppa (gruppa),
-                CONSTRAINT tb_tov_poz_pkey PRIMARY KEY (gruppa, tov_poz, date_from)
-            );             
-            '''
-            ,
-            '''
-            CREATE TABLE IF NOT EXISTS tn_ved_relative.tb_sub_poz (
-                gruppa int2 NOT NULL,
-                tov_poz int2 NOT NULL,
-                sub_poz int4 NOT NULL,
-                kr_naim varchar NULL,
-                date_from varchar NOT NULL,
-                expired varchar NULL,
-                FOREIGN KEY (gruppa)  REFERENCES tn_ved_relative.tb_gruppa (gruppa),
-                FOREIGN KEY (tov_poz)  REFERENCES tn_ved_relative.tb_tov_poz (tov_poz),
-                CONSTRAINT tb_sub_poz_pkey PRIMARY KEY (gruppa, tov_poz, sub_poz, date_from)
-            );
-            '''
-         ]
-         
+import sys
+import configparser
+from pathlib import Path
+from sqlalchemy import Table, Column, Integer, String, SmallInteger, Date, PrimaryKeyConstraint, ForeignKeyConstraint
+
+# read configs
+config = configparser.ConfigParser() 
+config.read(Path(sys.path[0], 'pipeline.conf'))
+
+# table names in stage scheme and core scheme are equal
+tb_razdel_name = config['stage_layer']['tb_razdel_name']
+tb_gruppa_name = config['stage_layer']['tb_gruppa_name']
+tb_tov_poz_name = config['stage_layer']['tb_tov_poz_name']
+tb_sub_poz_name = config['stage_layer']['tb_sub_poz_name']
+tb_version_name = config['stage_layer']['tb_version_name']
+
+def create_tables(metadata_obj):
+    tb_1 = Table(
+                tb_razdel_name,
+                metadata_obj,
+                Column('razdel',    SmallInteger),
+                Column('naim',      String),
+                Column('prim',      String),
+                Column('date_from', Date),
+                Column('expired',   Date),
+                PrimaryKeyConstraint('razdel', 'date_from', name = f'{tb_razdel_name}_pk')
+                )
+                
+    tb_2 = Table(
+                tb_gruppa_name,
+                metadata_obj,
+                Column('razdel',    SmallInteger),                
+                Column('gruppa',    SmallInteger),
+                Column('naim',      String),
+                Column('prim',      String),
+                Column('date_from', Date),
+                Column('expired',   Date),
+                PrimaryKeyConstraint('razdel', 'gruppa', 'date_from', name = f'{tb_gruppa_name}_pk'),
+                ForeignKeyConstraint(['razdel', 'date_from'], 
+                                    [f'{tb_razdel_name}.razdel', f'{tb_razdel_name}.date_from'])
+                )
+
+    tb_3 = Table(
+                tb_tov_poz_name,
+                metadata_obj,
+                Column('razdel',    SmallInteger),                
+                Column('gruppa',    SmallInteger),
+                Column('tov_poz',   Integer),
+                Column('naim',      String),
+                Column('date_from', Date),
+                Column('expired',   Date),
+                PrimaryKeyConstraint('razdel', 'gruppa', 'tov_poz', 'date_from', name = f'{tb_tov_poz_name}_pk'),
+                ForeignKeyConstraint(['razdel', 'gruppa', 'date_from'], 
+                                    [f'{tb_gruppa_name}.razdel', f'{tb_gruppa_name}.gruppa', f'{tb_gruppa_name}.date_from'])                
+                )
+            
+
+    tb_4 = Table(
+                tb_sub_poz_name,
+                metadata_obj,
+                Column('razdel',    SmallInteger),                 
+                Column('gruppa',    SmallInteger),
+                Column('tov_poz',   Integer),
+                Column('sub_poz',   Integer),                
+                Column('kr_naim',   String),
+                Column('date_from', Date),
+                Column('expired',   Date),
+                PrimaryKeyConstraint('razdel', 'gruppa', 'tov_poz', 'sub_poz', 'date_from', name = f'{tb_sub_poz_name}_pk'),
+                ForeignKeyConstraint(['razdel', 'gruppa', 'tov_poz', 'date_from'], 
+                                    [f'{tb_tov_poz_name}.razdel', f'{tb_tov_poz_name}.gruppa', f'{tb_tov_poz_name}.tov_poz', f'{tb_tov_poz_name}.date_from'])                         
+                )
+                
+    tb_5 = Table(
+                tb_version_name,
+                metadata_obj,
+                Column('file_name', String),
+                Column('table_name',String),
+                Column('version',   String),
+                Column('date_from', Date),
+                Column('some_code', String),
+                PrimaryKeyConstraint('table_name', 'version', name = f'{tb_version_name}_pk'),                
+                )                
+    return metadata_obj
+
 if __name__ == '__main__': 
 	pass
