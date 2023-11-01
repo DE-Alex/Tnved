@@ -87,7 +87,7 @@ def main():
         db_datasets[table_name] = df
     
     # join datasets in one structure to arrange relations
-    print('join datasets in one structure to arrange relations')
+    print('Join datasets in one structure to arrange relations')
     voc = {}
     # razdel dataset
     df = db_datasets[tb_razdel_name]
