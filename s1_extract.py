@@ -25,9 +25,6 @@ def main():
     
     # download zip file
     payload = download_data(url)
-    # path = Path(tmp_folder, 'TNVED.ZIP')
-    # with open(path, 'rb') as file:
-        # payload = file.read()
     
     # extract txt files
     z_file = zipfile.ZipFile(io.BytesIO(payload))
