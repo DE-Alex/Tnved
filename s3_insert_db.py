@@ -55,7 +55,7 @@ def main():
         short_name = Path(f_path).stem
         
         # get table name by short filename
-        table_name = config['stage_layer'][short_name]
+        table_name = config['data_model'][short_name]
         
         # get column names  
         col_names = md_obj.tables[stage_scheme + '.' + table_name].columns.keys()

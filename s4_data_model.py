@@ -23,11 +23,11 @@ stage_scheme = config['stage_layer']['scheme_name']
 core_scheme = config['core_layer']['scheme_name']
 
 #table names
-tb_razdel_name = config['stage_layer']['tb_razdel_name']
-tb_gruppa_name = config['stage_layer']['tb_gruppa_name']
-tb_tov_poz_name = config['stage_layer']['tb_tov_poz_name']
-tb_sub_poz_name = config['stage_layer']['tb_sub_poz_name']
-tb_version_name = config['stage_layer']['tb_version_name']
+tb_razdel_name = config['data_model']['tb_razdel_name']
+tb_gruppa_name = config['data_model']['tb_gruppa_name']
+tb_tov_poz_name = config['data_model']['tb_tov_poz_name']
+tb_sub_poz_name = config['data_model']['tb_sub_poz_name']
+tb_version_name = config['data_model']['tb_version_name']
 
 def main():
     start = time.time()

@@ -8,11 +8,11 @@ config = configparser.ConfigParser()
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
 # table names in stage scheme and core scheme are equal
-tb_razdel_name = config['stage_layer']['tb_razdel_name']
-tb_gruppa_name = config['stage_layer']['tb_gruppa_name']
-tb_tov_poz_name = config['stage_layer']['tb_tov_poz_name']
-tb_sub_poz_name = config['stage_layer']['tb_sub_poz_name']
-tb_version_name = config['stage_layer']['tb_version_name']
+tb_razdel_name = config['data_model']['tb_razdel_name']
+tb_gruppa_name = config['data_model']['tb_gruppa_name']
+tb_tov_poz_name = config['data_model']['tb_tov_poz_name']
+tb_sub_poz_name = config['data_model']['tb_sub_poz_name']
+tb_version_name = config['data_model']['tb_version_name']
 
 def create_tables(metadata_obj):
     tb_1 = Table(

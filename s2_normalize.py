@@ -51,7 +51,7 @@ def main():
         dt_date_from = datetime.strptime(version_info[1], '%Y%m%d')
         version_info[1] = date.isoformat(dt_date_from)
         f_name = Path(txt_path).stem
-        table_name = config['stage_layer'][f_name]
+        table_name = config['data_model'][f_name]
         file_version = [f_name, table_name] + version_info
         # save info about TN VED version in csv file separately 
         f_ver_path = Path(tmp_folder, 'tnved_version.csv')
