@@ -3,8 +3,7 @@ import configparser
 import sys, os
 import csv
 from pathlib import Path
-from datetime import date
-from datetime import datetime
+from datetime import date, datetime
 
 # developed modules
 import s5_common_func
