@@ -1,6 +1,6 @@
 # standart modules
 import configparser
-import sys
+import sys, os
 import time
 import requests
 import zipfile
