@@ -1,10 +1,8 @@
 # standart modules
 import sys, time
 import configparser
+import sqlalchemy as sa
 import pandas as pd
-from pandas import DataFrame, Timestamp, Timedelta
-from sqlalchemy import create_engine
-from sqlalchemy import MetaData
 from pathlib import Path
 
 # developed modules
@@ -14,12 +12,6 @@ from sql.core_create_objects import create_tables
 config = configparser.ConfigParser()
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
-db_type = config['general']['db_type']
-
-#SQLight settings
-sqlite_stage_path = Path(sys.path[0], config['sqlite']['sqlite_stage_file'])
-sqlite_core_path = Path(sys.path[0], config['sqlite']['sqlite_core_file'])
-
 #Postgres settings
 user = config['postgres']['username']
 password = config['postgres']['password']
@@ -27,8 +19,8 @@ host = config['postgres']['host']
 port = config['postgres']['port']
 dbname = config['postgres']['database']
 
-stage = config['stage_layer']['scheme_name']
-core = config['core_layer']['scheme_name']
+stage_scheme = config['stage_layer']['scheme_name']
+core_scheme = config['core_layer']['scheme_name']
 
 #table names
 tb_razdel_name = config['stage_layer']['tb_razdel_name']
@@ -40,41 +32,28 @@ tb_version_name = config['stage_layer']['tb_version_name']
 def main():
     start = time.time()
     # connect to "core layer"
-    if db_type == 'sqlite':
-        core_engine = create_engine(f'sqlite:///{sqlite_core_path}')
-        core_scheme = None
-    elif db_type == 'postgres':
-        core_engine = create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
-        core_scheme = core
-    core_conn = core_engine.connect()
-    core_md_obj = MetaData(core_scheme)
-
-    # drop tables in "core layer" and create new
-    a = input(f'Drop scheme "{core_scheme}" and create new tables? (y)')
-    if a == 'y':
-        core_md_obj.reflect(core_conn)
-        core_md_obj.drop_all(core_conn)
-        core_md_obj = MetaData(core_scheme)
-        core_md_obj = create_tables(core_md_obj)
-        core_md_obj.create_all(core_conn)
-        core_conn.commit()
-        msg = f'Scheme {core_scheme} droped. New tables created.'
+    engine = sa.create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
+    conn = engine.connect()
+    
+    # Drop core scheme if exists and create new
+    answ = input(f'Drop {core_scheme} schema if exists? (y)')
+    if answ == 'y':
+        conn.execute(sa.schema.DropSchema(core_scheme, cascade = True, if_exists = True))
+        conn.execute(sa.schema.CreateSchema(core_scheme))
+        conn.commit()
+        msg = f'Scheme {core_scheme} created.'
         print(msg)
-        s5_common_func.write_journal(msg)
-    core_md_obj.reflect(core_conn)
-
-    # connect to "stage layer"
-    if db_type == 'sqlite':
-        stage_engine = create_engine(f'sqlite:///{sqlite_stage_path}')
-        stage_scheme = None
-    elif db_type == 'postgres':
-        stage_engine = create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
-        stage_scheme = stage
-    stage_conn = stage_engine.connect()
-    stage_md_obj = MetaData(stage_scheme)
-    stage_md_obj.reflect(stage_conn)
+        s5_common_func.write_journal(msg) 
+    
+    # "core layer": create tables if not exists
+    core_md_obj = sa.MetaData(core_scheme)
+    core_md_obj = create_tables(core_md_obj)
+    core_md_obj.create_all(conn, checkfirst = True)  
+    conn.commit()    
 
     # get table names from "stage layer"
+    stage_md_obj = sa.MetaData(stage_scheme)
+    stage_md_obj.reflect(conn)
     stage_table_names = [table.name for table in stage_md_obj.sorted_tables]
 
     # read data from database
@@ -82,7 +61,7 @@ def main():
     db_datasets = {}
     for table_name in stage_table_names:
         print(f'- from {table_name}:', end = '')
-        df = pd.read_sql_table(table_name, stage_conn, schema = stage_scheme, parse_dates = ['date_from', 'expired'])
+        df = pd.read_sql_table(table_name, conn, schema = stage_scheme, parse_dates = ['date_from', 'expired'])
         print(f' {len(df)} rows')
         db_datasets[table_name] = df
     
@@ -180,7 +159,7 @@ def main():
                         s_dates_joined.append(row[-2])
                 voc[r]['str'][g]['str'][p]['data'] = correct_start_date(s_dates_joined, p_dt)
                 dates = p_dates_joined + s_dates_joined
-                periods = gener_periods(dates)
+                periods = form_periods(dates)
                 
                 voc[r]['str'][g]['str'][p]['data'] = ext_data(p_dt, periods)
 
@@ -203,7 +182,7 @@ def main():
                     p_dates_joined.append(row[-2])
             voc[r]['str'][g]['data'] = correct_start_date(p_dates_joined, g_dt)
             dates = g_dates_joined + p_dates_joined
-            periods = gener_periods(dates)
+            periods = form_periods(dates)
 
             voc[r]['str'][g]['data'] = ext_data(g_dt, periods)
 
@@ -225,7 +204,7 @@ def main():
                 g_dates_joined.append(row[-2])
         voc[r]['data'] = correct_start_date(g_dates_joined, r_dt)
         dates = r_dates_joined + g_dates_joined
-        periods = gener_periods(dates)
+        periods = form_periods(dates)
         voc[r]['data'] = ext_data(r_dt, periods)
 
         for g in list(voc[r]['str'].keys()):
@@ -248,18 +227,14 @@ def main():
     print('Load to database:')
     for table_name, dt_date in data_sets:
         # get column names
-        if core_scheme != None:
-            col_names = core_md_obj.tables[core_scheme + '.' + table_name].columns.keys()
-        else:
-            col_names = core_md_obj.tables[table_name].columns.keys()
+        col_names = core_md_obj.tables[core_scheme + '.' + table_name].columns.keys()
         try:
             # convert "list" objects to pandas "DataFrames"
             pdt = pd.DataFrame(dt_date, columns = col_names)
 
-            # insert dataset into database table
-            result = pdt.to_sql(table_name, core_conn, schema = core_scheme, if_exists = 'append', index = False, method = None, chunksize = 1000)
-
-            core_conn.commit()
+            # load dataset into database table
+            result = pdt.to_sql(table_name, conn, schema = core_scheme, index = False, method = None, chunksize = 1000)
+            conn.commit()
             msg = f'- {table_name}: loaded'
             print(msg)
             s5_common_func.write_journal(msg)
@@ -279,9 +254,9 @@ def correct_dates_intervals(dataset):
         if i < N-1:
             next_row = dataset[i+1]
             next_date = next_row[-2]
-            expired = next_date - Timedelta(days = 1)
+            expired = next_date - pd.Timedelta(days = 1)
         elif i == N-1:
-            expired = Timestamp(2030,6,6)
+            expired = pd.Timestamp(2030,6,6)
         new_row = row[:-1]
         new_row.append(expired)
         new_dset.append(new_row)
@@ -303,7 +278,8 @@ def correct_start_date(dates, dataset):
         dataset[0] = new_row
     return dataset
     
-def gener_periods(dt_dates):
+def form_periods(dt_dates):
+    # form minimal periods to split big periods later
     unique_dates = list(set(dt_dates))
     unique_dates.sort()
     periods = []
@@ -311,19 +287,21 @@ def gener_periods(dt_dates):
     for i in range(N):
         d1 = unique_dates[i]
         if i < N-1:
-            d2 = unique_dates[i+1] - Timedelta(days = 1)
+            d2 = unique_dates[i+1] - pd.Timedelta(days = 1)
         elif i == N-1:
-            d2 = Timestamp(2030,6,6)
+            d2 = pd.Timestamp(2030,6,6)
         periods.append([d1, d2])
     return periods
 
 def ext_data(data, periods):
+    # split big intervals into minimal periods
+    # and increase number of rows
     extended_data = []
     for row in data:
         date_from = row[-2]
         expired = row[-1]
         if pd.isnull(expired) == True:
-            expired = Timestamp(2030,6,6)
+            expired = pd.Timestamp(2030,6,6)
         else:
             pass
         for period in periods:

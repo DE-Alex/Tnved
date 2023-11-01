@@ -2,8 +2,7 @@
 import configparser
 import sys, os
 import pandas as pd
-from sqlalchemy import create_engine
-from sqlalchemy import MetaData
+import sqlalchemy as sa
 from pathlib import Path
 
 # developed modules
@@ -15,10 +14,6 @@ config = configparser.ConfigParser()
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
 tmp_folder = Path(sys.path[0], config['general']['tmp_folder'])
-db_type = config['general']['db_type']
-
-#SQLight settings
-sqlite_stage_path = Path(sys.path[0], config['sqlite']['sqlite_stage_file'])
 
 #Postgres settings
 user = config['postgres']['username']
@@ -36,28 +31,25 @@ def main():
         return None
 
     # create SQLAlchemy engine
-    if db_type == 'sqlite':
-        engine = create_engine(f'sqlite:///{sqlite_stage_path}')
-        db_schema = None
-    elif db_type == 'postgres':
-        engine = create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
-        db_schema = stage_scheme
+    engine = sa.create_engine(f'postgresql+psycopg://{user}:{password}@{host}:{port}/{dbname}')
     conn = engine.connect()
-    md_obj = MetaData(db_schema)    
     
-    a = input(f'Drop scheme "{stage_scheme}"? (y)')
-    if a == 'y':
-        md_obj.reflect(conn)
-        md_obj.drop_all(conn)
-        md_obj = MetaData(db_schema)
-        md_obj = create_tables(md_obj)
-        md_obj.create_all(conn)  
+    # Drop scheme if exists and create new
+    answ = input(f'Drop {stage_scheme} schema if exists? (y)')
+    if answ == 'y':
+        conn.execute(sa.schema.DropSchema(stage_scheme, cascade = True, if_exists = True))
+        conn.execute(sa.schema.CreateSchema(stage_scheme))
         conn.commit()
-        msg = f'scheme {stage_scheme} droped. tables created.'
+        msg = f'Scheme {stage_scheme} created.'
         print(msg)
-        s5_common_func.write_journal(msg)
-    md_obj.reflect(conn)
+        s5_common_func.write_journal(msg) 
     
+    # create tables if not exists
+    md_obj = sa.MetaData(stage_scheme)
+    md_obj = create_tables(md_obj)
+    md_obj.create_all(conn, checkfirst = True)  
+    conn.commit()
+     
     for f_path in f_paths:
         # get short filename (without extension)
         short_name = Path(f_path).stem
@@ -66,16 +58,13 @@ def main():
         table_name = config['stage_layer'][short_name]
         
         # get column names  
-        if db_type == 'sqlite':
-            col_names = md_obj.tables[table_name].columns.keys()
-        elif db_type == 'postgres':
-            col_names = md_obj.tables[stage_scheme + '.' + table_name].columns.keys()
+        col_names = md_obj.tables[stage_scheme + '.' + table_name].columns.keys()
         
         # read data from .csv files
         dataset = pd.read_csv(f_path, delimiter = '|', header = None, names = col_names, encoding = 'utf-8')
         
         # insert dataset into database table        
-        result = dataset.to_sql(table_name, conn, db_schema, if_exists = 'replace', index = False, chunksize = 1000)
+        result = dataset.to_sql(table_name, conn, stage_scheme, if_exists = 'replace', index = False, chunksize = 1000)
         conn.commit()
         msg = f'{table_name}: inserted'
         print(msg)
@@ -86,4 +75,4 @@ def main():
     conn.close()
     
 if __name__ == '__main__':
-    main()
+   m = main()
