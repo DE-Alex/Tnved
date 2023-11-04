@@ -38,17 +38,21 @@ def main():
     answ = input(f'Drop {stage_scheme} schema if exists? (y)')
     if answ == 'y':
         conn.execute(sa.schema.DropSchema(stage_scheme, cascade = True, if_exists = True))
-        conn.execute(sa.schema.CreateSchema(stage_scheme))
-        conn.commit()
-        msg = f'Scheme {stage_scheme} created.'
+        msg = f'Scheme {stage_scheme} droped.'
         print(msg)
-        s5_common_func.write_journal(msg) 
+    # Create scheme if not exists        
+    conn.execute(sa.schema.CreateSchema(stage_scheme, if_not_exists=True))
+    conn.commit()
     
     # create tables if not exists
     md_obj = sa.MetaData(stage_scheme)
     md_obj = create_tables(md_obj)
     md_obj.create_all(conn, checkfirst = True)  
     conn.commit()
+    
+    msg = f'Scheme {stage_scheme} is ready.'
+    print(msg)
+    s5_common_func.write_journal(msg)      
      
     for f_path in f_paths:
         # get short filename (without extension)
@@ -64,7 +68,7 @@ def main():
         dataset = pd.read_csv(f_path, delimiter = '|', header = None, names = col_names, encoding = 'utf-8')
         
         # insert dataset into database table        
-        result = dataset.to_sql(table_name, conn, stage_scheme, if_exists = 'replace', index = False, chunksize = 1000)
+        result = dataset.to_sql(table_name, conn, schema = stage_scheme, if_exists = 'replace', index = False, chunksize = 1000)
         conn.commit()
         msg = f'{table_name}: inserted'
         print(msg)

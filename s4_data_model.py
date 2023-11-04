@@ -39,17 +39,21 @@ def main():
     answ = input(f'Drop {core_scheme} schema if exists? (y)')
     if answ == 'y':
         conn.execute(sa.schema.DropSchema(core_scheme, cascade = True, if_exists = True))
-        conn.execute(sa.schema.CreateSchema(core_scheme))
-        conn.commit()
-        msg = f'Scheme {core_scheme} created.'
+        msg = f'Scheme {core_scheme} droped.'
         print(msg)
-        s5_common_func.write_journal(msg) 
+    # Create scheme if not exists        
+    conn.execute(sa.schema.CreateSchema(core_scheme, if_not_exists=True))
+    conn.commit()
     
     # "core layer": create tables if not exists
     core_md_obj = sa.MetaData(core_scheme)
     core_md_obj = create_tables(core_md_obj)
     core_md_obj.create_all(conn, checkfirst = True)  
-    conn.commit()    
+    conn.commit()   
+    
+    msg = f'Scheme {core_scheme} is ready.'
+    print(msg)
+    s5_common_func.write_journal(msg)  
 
     # get table names from "stage layer"
     stage_md_obj = sa.MetaData(stage_scheme)
