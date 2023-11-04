@@ -12,7 +12,7 @@ from sql.core_create_objects import create_tables
 config = configparser.ConfigParser()
 config.read(Path(sys.path[0], 'pipeline.conf'))
 
-#SQLight settings
+#SQLite settings
 sqlite_stage_path = Path(sys.path[0], config['sqlite']['sqlite_stage_file'])
 sqlite_core_path = Path(sys.path[0], config['sqlite']['sqlite_core_file'])
 
