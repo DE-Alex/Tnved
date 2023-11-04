@@ -9,7 +9,7 @@ EtL-проект по извлечению данных из справочни�
 * Язык запросов: SQL
 * СУБД: PostgreSQL 14.9 (master branch) или SQLight (SQLightDB branch)
 #### Схема EtL процесса
-![EtL_scheme_2](https://github.com/DE-Alex/Tnved/assets/139635578/68f036aa-1a72-47ae-b831-405429929491)
+![EtL_scheme_2](https://github.com/DE-Alex/Tnved/assets/139635578/e045800a-0300-4ae7-819d-91dfc66db8d4)
 ---
 
 ##### Структура проекта
