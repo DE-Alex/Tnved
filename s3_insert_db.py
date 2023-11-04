@@ -15,7 +15,7 @@ config.read(Path(sys.path[0], 'pipeline.conf'))
 
 tmp_folder = Path(sys.path[0], config['general']['tmp_folder'])
 
-#SQLight settings
+#SQLite settings
 sqlite_stage_path = Path(sys.path[0], config['sqlite']['sqlite_stage_file'])
 
 def main():
