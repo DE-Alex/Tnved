@@ -1,6 +1,6 @@
 import sys
 import configparser
-import glob
+import os, fnmatch
 from pathlib import Path
 from datetime import datetime
 from dateutil.tz import tzlocal
@@ -13,8 +13,12 @@ journal_path = Path(sys.path[0], config['general']['logs_folder'], config['gener
 
 def search_by_mask(folder, mask):
     # search files in folder by mask
-    mask_path = str(Path(folder, mask))
-    f_paths = glob.glob(mask_path)
+    f_paths = []
+    for name in os.listdir(folder):
+        f = name.lower()
+        if fnmatch.fnmatch(f, mask):
+            f_path = Path(folder, name)
+            f_paths.append(f_path)
     return f_paths
   
 def write_journal(msg):
